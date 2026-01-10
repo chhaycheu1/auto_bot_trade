@@ -10,24 +10,24 @@ import os
 import traceback
 
 # Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
-from config.settings import TRADING_PAIRS, DEFAULT_PAIR, DEFAULT_TIMEFRAME, RISK_SETTINGS
+# Import settings first
+try:
+    from config.settings import TRADING_PAIRS, DEFAULT_PAIR, DEFAULT_TIMEFRAME, RISK_SETTINGS
+except Exception as e:
+    TRADING_PAIRS = ['BTCUSDT', 'SOLUSDT']
+    DEFAULT_PAIR = 'BTCUSDT'
+    DEFAULT_TIMEFRAME = '1h'
+    RISK_SETTINGS = {}
 
 app = Flask(__name__, 
     template_folder='templates',
     static_folder='static'
 )
 app.config['SECRET_KEY'] = 'trading-bot-secret-key'
-
-# Global error handlers to always return JSON
-@app.errorhandler(500)
-def handle_500(error):
-    return jsonify({'success': False, 'error': 'Internal server error', 'details': str(error)}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(error):
-    return jsonify({'success': False, 'error': str(error), 'trace': traceback.format_exc()}), 500
+app.config['PROPAGATE_EXCEPTIONS'] = True
 
 # Global state
 bot_state = {
@@ -53,6 +53,12 @@ def index():
 def get_status():
     """Get current bot status."""
     return jsonify(bot_state)
+
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint."""
+    return jsonify({'status': 'ok', 'message': 'Trading bot dashboard is running'})
 
 
 @app.route('/api/price/<symbol>')
@@ -127,11 +133,11 @@ def get_signal(symbol):
         data_loader = DataLoader()
         strategy = TradingStrategy()
         
-        # Generate sample data
+        # Generate sample data (smaller for signal)
         df = data_loader.generate_sample_data(
             symbol=symbol,
             interval='1h',
-            days=30,
+            days=10,  # Reduced from 30
             start_price=94000 if 'BTC' in symbol else 180
         )
         
@@ -155,13 +161,14 @@ def get_signal(symbol):
 def run_backtest():
     """Run a backtest with specified parameters."""
     try:
+        # Lazy imports to reduce memory at startup
         from backtesting.backtest import Backtester
         from backtesting.data_loader import DataLoader
         
         data = request.json or {}
         symbol = data.get('symbol', DEFAULT_PAIR)
         timeframe = data.get('timeframe', '1h')
-        days = data.get('days', 90)
+        days = min(data.get('days', 30), 60)  # Cap at 60 days for memory
         
         data_loader = DataLoader()
         
@@ -177,12 +184,12 @@ def run_backtest():
         backtester = Backtester(initial_capital=10000)
         result = backtester.run(df, symbol, timeframe)
         
-        # Format trades for display
+        # Format trades for display (only last 10 to save memory)
         trades = []
-        for t in result.trades[-20:]:  # Last 20 trades
+        for t in result.trades[-10:]:
             trades.append({
-                'entry_time': t.entry_time.isoformat() if hasattr(t.entry_time, 'isoformat') else str(t.entry_time),
-                'exit_time': t.exit_time.isoformat() if hasattr(t.exit_time, 'isoformat') else str(t.exit_time),
+                'entry_time': str(t.entry_time),
+                'exit_time': str(t.exit_time),
                 'side': t.side,
                 'entry_price': round(float(t.entry_price), 2),
                 'exit_price': round(float(t.exit_price), 2),
@@ -191,13 +198,10 @@ def run_backtest():
                 'reason': t.exit_reason
             })
         
-        # Convert equity curve safely
-        equity_list = []
-        if result.equity_curve is not None:
-            try:
-                equity_list = [round(float(v), 2) for v in result.equity_curve.tolist()[-100:]]
-            except:
-                equity_list = []
+        # Cap profit factor to avoid inf
+        profit_factor = float(result.profit_factor)
+        if profit_factor > 999 or profit_factor == float('inf'):
+            profit_factor = 999.0
         
         return jsonify({
             'success': True,
@@ -206,7 +210,7 @@ def run_backtest():
                 'winning_trades': int(result.winning_trades),
                 'losing_trades': int(result.losing_trades),
                 'win_rate': round(float(result.win_rate), 1),
-                'profit_factor': round(float(min(result.profit_factor, 999)), 2),  # Cap infinity
+                'profit_factor': round(profit_factor, 2),
                 'total_return': round(float(result.total_return_pct), 2),
                 'max_drawdown': round(float(result.max_drawdown_pct), 2),
                 'sharpe_ratio': round(float(result.sharpe_ratio), 2),
@@ -214,16 +218,21 @@ def run_backtest():
                 'final_capital': round(float(result.final_capital), 2)
             },
             'trades': trades,
-            'equity_curve': equity_list
+            'equity_curve': []  # Skip to save memory
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
 
 
-@app.route('/api/health')
-def health_check():
-    """Health check endpoint."""
-    return jsonify({'status': 'ok', 'message': 'Trading bot dashboard is running'})
+# Error handlers
+@app.errorhandler(500)
+def handle_500(error):
+    return jsonify({'success': False, 'error': 'Internal server error', 'details': str(error)}), 500
+
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    return jsonify({'success': False, 'error': str(error), 'trace': traceback.format_exc()}), 500
 
 
 if __name__ == '__main__':
