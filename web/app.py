@@ -7,6 +7,7 @@ Provides a web interface for the trading bot.
 from flask import Flask, render_template, jsonify, request
 import sys
 import os
+import traceback
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,6 +19,15 @@ app = Flask(__name__,
     static_folder='static'
 )
 app.config['SECRET_KEY'] = 'trading-bot-secret-key'
+
+# Global error handlers to always return JSON
+@app.errorhandler(500)
+def handle_500(error):
+    return jsonify({'success': False, 'error': 'Internal server error', 'details': str(error)}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    return jsonify({'success': False, 'error': str(error), 'trace': traceback.format_exc()}), 500
 
 # Global state
 bot_state = {
@@ -74,11 +84,11 @@ def get_price(symbol):
         for idx, row in df_recent.iterrows():
             candles.append({
                 'time': idx.isoformat(),
-                'open': round(row['open'], 2),
-                'high': round(row['high'], 2),
-                'low': round(row['low'], 2),
-                'close': round(row['close'], 2),
-                'volume': round(row['volume'], 2)
+                'open': round(float(row['open']), 2),
+                'high': round(float(row['high']), 2),
+                'low': round(float(row['low']), 2),
+                'close': round(float(row['close']), 2),
+                'volume': round(float(row['volume']), 2)
             })
         
         # Get indicator values
@@ -103,7 +113,6 @@ def get_price(symbol):
             'indicators': indicator_values
         })
     except Exception as e:
-        import traceback
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
 
 
@@ -139,7 +148,6 @@ def get_signal(symbol):
             'details': {}
         })
     except Exception as e:
-        import traceback
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
 
 
@@ -150,7 +158,7 @@ def run_backtest():
         from backtesting.backtest import Backtester
         from backtesting.data_loader import DataLoader
         
-        data = request.json
+        data = request.json or {}
         symbol = data.get('symbol', DEFAULT_PAIR)
         timeframe = data.get('timeframe', '1h')
         days = data.get('days', 90)
@@ -173,36 +181,49 @@ def run_backtest():
         trades = []
         for t in result.trades[-20:]:  # Last 20 trades
             trades.append({
-                'entry_time': t.entry_time.isoformat(),
-                'exit_time': t.exit_time.isoformat(),
+                'entry_time': t.entry_time.isoformat() if hasattr(t.entry_time, 'isoformat') else str(t.entry_time),
+                'exit_time': t.exit_time.isoformat() if hasattr(t.exit_time, 'isoformat') else str(t.exit_time),
                 'side': t.side,
-                'entry_price': round(t.entry_price, 2),
-                'exit_price': round(t.exit_price, 2),
-                'pnl': round(t.pnl, 2),
-                'pnl_pct': round(t.pnl_pct, 2),
+                'entry_price': round(float(t.entry_price), 2),
+                'exit_price': round(float(t.exit_price), 2),
+                'pnl': round(float(t.pnl), 2),
+                'pnl_pct': round(float(t.pnl_pct), 2),
                 'reason': t.exit_reason
             })
+        
+        # Convert equity curve safely
+        equity_list = []
+        if result.equity_curve is not None:
+            try:
+                equity_list = [round(float(v), 2) for v in result.equity_curve.tolist()[-100:]]
+            except:
+                equity_list = []
         
         return jsonify({
             'success': True,
             'results': {
-                'total_trades': result.total_trades,
-                'winning_trades': result.winning_trades,
-                'losing_trades': result.losing_trades,
-                'win_rate': round(result.win_rate, 1),
-                'profit_factor': round(result.profit_factor, 2),
-                'total_return': round(result.total_return_pct, 2),
-                'max_drawdown': round(result.max_drawdown_pct, 2),
-                'sharpe_ratio': round(result.sharpe_ratio, 2),
-                'initial_capital': result.initial_capital,
-                'final_capital': round(result.final_capital, 2)
+                'total_trades': int(result.total_trades),
+                'winning_trades': int(result.winning_trades),
+                'losing_trades': int(result.losing_trades),
+                'win_rate': round(float(result.win_rate), 1),
+                'profit_factor': round(float(min(result.profit_factor, 999)), 2),  # Cap infinity
+                'total_return': round(float(result.total_return_pct), 2),
+                'max_drawdown': round(float(result.max_drawdown_pct), 2),
+                'sharpe_ratio': round(float(result.sharpe_ratio), 2),
+                'initial_capital': float(result.initial_capital),
+                'final_capital': round(float(result.final_capital), 2)
             },
             'trades': trades,
-            'equity_curve': [round(v, 2) for v in result.equity_curve.tolist()[-100:]]
+            'equity_curve': equity_list
         })
     except Exception as e:
-        import traceback
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint."""
+    return jsonify({'status': 'ok', 'message': 'Trading bot dashboard is running'})
 
 
 if __name__ == '__main__':
