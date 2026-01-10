@@ -1,0 +1,31 @@
+# Credentials (NEVER commit these!)
+config/credentials.py
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+env/
+venv/
+.venv/
+
+# Data files
+data_cache/
+*.csv
+trades.csv
+
+# Logs
+*.log
+
+# Charts
+*.png
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

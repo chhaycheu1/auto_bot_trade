@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Bot Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>Trading Bot</h1>
+            </div>
+            <div class="header-controls">
+                <select id="symbolSelect" class="select-dark">
+                    {% for pair in pairs %}
+                    <option value="{{ pair }}" {% if pair == default_pair %}selected{% endif %}>{{ pair }}</option>
+                    {% endfor %}
+                </select>
+                <select id="timeframeSelect" class="select-dark">
+                    {% for tf in timeframes %}
+                    <option value="{{ tf }}" {% if tf == default_timeframe %}selected{% endif %}>{{ tf }}</option>
+                    {% endfor %}
+                </select>
+                <button id="startBtn" class="btn btn-success">▶ Start Bot</button>
+                <button id="stopBtn" class="btn btn-danger" disabled>⏹ Stop Bot</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Left Panel - Chart -->
+            <section class="chart-section">
+                <div class="card">
+                    <div class="card-header">
+                        <h2>📊 Price Chart</h2>
+                        <div class="price-info">
+                            <span class="current-price" id="currentPrice">--</span>
+                            <span class="price-change" id="priceChange">--</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel - Info -->
+            <aside class="info-panel">
+                <!-- Signal Card -->
+                <div class="card signal-card">
+                    <div class="card-header">
+                        <h3>🎯 Current Signal</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="signal-display" id="signalDisplay">
+                            <div class="signal-type hold">HOLD</div>
+                            <div class="signal-score">
+                                <span class="label">Score:</span>
+                                <span class="value" id="signalScore">--</span>
+                            </div>
+                        </div>
+                        <div class="indicator-grid">
+                            <div class="indicator">
+                                <span class="label">RSI</span>
+                                <span class="value" id="rsiValue">--</span>
+                            </div>
+                            <div class="indicator">
+                                <span class="label">MACD</span>
+                                <span class="value" id="macdValue">--</span>
+                            </div>
+                            <div class="indicator">
+                                <span class="label">EMA Trend</span>
+                                <span class="value" id="emaTrend">--</span>
+                            </div>
+                            <div class="indicator">
+                                <span class="label">Volume</span>
+                                <span class="value" id="volumeStatus">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Card -->
+                <div class="card stats-card">
+                    <div class="card-header">
+                        <h3>📈 Performance</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-grid">
+                            <div class="stat">
+                                <span class="stat-value" id="totalTrades">0</span>
+                                <span class="stat-label">Total Trades</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value" id="winRate">0%</span>
+                                <span class="stat-label">Win Rate</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value" id="totalPnl">$0</span>
+                                <span class="stat-label">Total P&L</span>
+                            </div>
+                            <div class="stat">
+                                <span class="stat-value" id="balance">$10,000</span>
+                                <span class="stat-label">Balance</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Backtest Card -->
+                <div class="card backtest-card">
+                    <div class="card-header">
+                        <h3>🧪 Backtest</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="backtest-controls">
+                            <input type="number" id="backtestDays" value="90" min="7" max="365" class="input-dark">
+                            <span>days</span>
+                            <button id="runBacktest" class="btn btn-primary">Run Backtest</button>
+                        </div>
+                        <div id="backtestResults" class="backtest-results hidden">
+                            <div class="result-item">
+                                <span>Win Rate:</span>
+                                <span id="btWinRate">--</span>
+                            </div>
+                            <div class="result-item">
+                                <span>Total Return:</span>
+                                <span id="btReturn">--</span>
+                            </div>
+                            <div class="result-item">
+                                <span>Max Drawdown:</span>
+                                <span id="btDrawdown">--</span>
+                            </div>
+                            <div class="result-item">
+                                <span>Profit Factor:</span>
+                                <span id="btProfitFactor">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Trade History -->
+        <section class="trade-history">
+            <div class="card">
+                <div class="card-header">
+                    <h3>📜 Recent Trades</h3>
+                </div>
+                <div class="card-body">
+                    <table class="trades-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Side</th>
+                                <th>Entry</th>
+                                <th>Exit</th>
+                                <th>P&L</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesBody">
+                            <tr>
+                                <td colspan="6" class="empty-state">No trades yet. Run a backtest or start the bot.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="status">
+                <span class="status-indicator" id="botStatus"></span>
+                <span id="statusText">Bot Offline</span>
+            </div>
+            <div class="footer-info">
+                Last update: <span id="lastUpdate">--</span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>
