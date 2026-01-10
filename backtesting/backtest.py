@@ -9,6 +9,10 @@ import numpy as np
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
+
+# Use Agg backend for headless servers (must be before importing pyplot)
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 import sys
