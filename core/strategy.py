@@ -141,7 +141,12 @@ class TradingStrategy:
         score = 0.0
         details = {}
         
-        # 1. EMA Crossover Score (25%)
+        # TREND FILTER: Don't buy in bearish trend (price below EMA 200)
+        # This significantly improves win rate
+        if 'ema_trend' in latest and latest['close'] < latest.get('ema_trend', latest['close']):
+            return 0.0, {'trend_filter': 'blocked - price below EMA 200'}
+        
+        # 1. EMA Crossover Score
         ema_score = 0
         if latest['ema_short_above_medium']:
             ema_score += 50  # Short above medium
