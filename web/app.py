@@ -164,13 +164,18 @@ def run_backtest():
         # Lazy imports to reduce memory at startup
         from backtesting.backtest import Backtester
         from backtesting.data_loader import DataLoader
+        from core.strategies import get_strategy, get_all_strategies
         
         data = request.json or {}
         symbol = data.get('symbol', DEFAULT_PAIR)
         timeframe = data.get('timeframe', '1h')
-        days = min(data.get('days', 30), 60)  # Cap at 60 days for memory
+        days = min(data.get('days', 30), 90)  # Cap at 90 days
+        strategy_id = data.get('strategy', 'trend_following')
         
         data_loader = DataLoader()
+        
+        # Get the selected strategy
+        strategy = get_strategy(strategy_id)
         
         # Generate data
         df = data_loader.generate_sample_data(
@@ -180,8 +185,8 @@ def run_backtest():
             start_price=94000 if 'BTC' in symbol else 180
         )
         
-        # Run backtest
-        backtester = Backtester(initial_capital=10000)
+        # Run backtest with selected strategy
+        backtester = Backtester(initial_capital=10000, strategy=strategy)
         result = backtester.run(df, symbol, timeframe)
         
         # Format trades for display (only last 10 to save memory)
@@ -205,6 +210,8 @@ def run_backtest():
         
         return jsonify({
             'success': True,
+            'strategy': strategy_id,
+            'strategy_name': strategy.name,
             'results': {
                 'total_trades': int(result.total_trades),
                 'winning_trades': int(result.winning_trades),
@@ -222,6 +229,17 @@ def run_backtest():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e), 'trace': traceback.format_exc()})
+
+
+@app.route('/api/strategies')
+def list_strategies():
+    """Get list of available trading strategies."""
+    try:
+        from core.strategies import get_all_strategies
+        strategies = get_all_strategies()
+        return jsonify({'success': True, 'strategies': strategies})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # Error handlers

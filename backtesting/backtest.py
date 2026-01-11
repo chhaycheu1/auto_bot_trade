@@ -101,7 +101,8 @@ class Backtester:
         initial_capital: float = None,
         commission: float = None,
         slippage: float = None,
-        risk_settings: Dict = None
+        risk_settings: Dict = None,
+        strategy = None
     ):
         """
         Initialize backtester.
@@ -111,13 +112,15 @@ class Backtester:
             commission: Trading commission (e.g., 0.001 for 0.1%)
             slippage: Estimated slippage (e.g., 0.0005 for 0.05%)
             risk_settings: Risk management settings
+            strategy: Optional strategy instance (uses TradingStrategy if not provided)
         """
         self.initial_capital = initial_capital or BACKTEST_SETTINGS['default_initial_capital']
         self.commission = commission or BACKTEST_SETTINGS['default_commission']
         self.slippage = slippage or BACKTEST_SETTINGS['default_slippage']
         self.risk_settings = risk_settings or RISK_SETTINGS
         
-        self.strategy = TradingStrategy()
+        # Use provided strategy or default
+        self.strategy = strategy if strategy else TradingStrategy()
     
     def run(
         self,

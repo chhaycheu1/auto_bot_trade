@@ -122,11 +122,27 @@
                     </div>
                     <div class="card-body">
                         <div class="backtest-controls">
-                            <input type="number" id="backtestDays" value="90" min="7" max="365" class="input-dark">
-                            <span>days</span>
-                            <button id="runBacktest" class="btn btn-primary">Run Backtest</button>
+                            <div class="control-row">
+                                <label for="strategySelect">Strategy:</label>
+                                <select id="strategySelect" class="select-dark">
+                                    <option value="trend_following">Trend Following (55-65%)</option>
+                                    <option value="rsi_macd" selected>RSI + MACD ⭐ (70-77%)</option>
+                                    <option value="mean_reversion">Mean Reversion (60-65%)</option>
+                                    <option value="triple_confirmation">Triple Confirmation (65-70%)</option>
+                                    <option value="momentum_breakout">Momentum Breakout (55-60%)</option>
+                                </select>
+                            </div>
+                            <div class="control-row">
+                                <input type="number" id="backtestDays" value="90" min="7" max="365" class="input-dark">
+                                <span>days</span>
+                                <button id="runBacktest" class="btn btn-primary">Run Backtest</button>
+                            </div>
                         </div>
                         <div id="backtestResults" class="backtest-results hidden">
+                            <div class="result-item strategy-result">
+                                <span>Strategy:</span>
+                                <span id="btStrategy">--</span>
+                            </div>
                             <div class="result-item">
                                 <span>Win Rate:</span>
                                 <span id="btWinRate">--</span>

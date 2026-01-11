@@ -265,6 +265,10 @@ async function runBacktest() {
     elements.runBacktest.disabled = true;
     elements.runBacktest.textContent = 'Running...';
 
+    // Get selected strategy
+    const strategySelect = document.getElementById('strategySelect');
+    const selectedStrategy = strategySelect ? strategySelect.value : 'trend_following';
+
     try {
         const response = await fetch('/api/backtest', {
             method: 'POST',
@@ -272,7 +276,8 @@ async function runBacktest() {
             body: JSON.stringify({
                 symbol: currentSymbol,
                 timeframe: currentTimeframe,
-                days: parseInt(elements.backtestDays?.value || 90)
+                days: parseInt(elements.backtestDays?.value || 90),
+                strategy: selectedStrategy
             })
         });
 
@@ -297,6 +302,10 @@ async function runBacktest() {
 function displayBacktestResults(data) {
     const results = data.results;
 
+    // Update strategy name
+    const btStrategy = document.getElementById('btStrategy');
+    if (btStrategy) btStrategy.textContent = data.strategy_name || data.strategy;
+
     // Update backtest stats
     const btWinRate = document.getElementById('btWinRate');
     const btReturn = document.getElementById('btReturn');
@@ -318,6 +327,7 @@ function displayBacktestResults(data) {
     if (elements.backtestResults) {
         elements.backtestResults.classList.remove('hidden');
     }
+
 
     // Update trades table
     updateTradesTable(data.trades);
